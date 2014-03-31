@@ -1,70 +1,95 @@
 package com.tokenautocomplete.example;
 
 import android.app.Activity;
+import android.content.Context;
+import android.database.Cursor;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
-import android.view.LayoutInflater;
+import android.provider.ContactsContract;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.FilterQueryProvider;
+import android.widget.SimpleCursorAdapter;
 import android.widget.TextView;
 
-import com.tokenautocomplete.FilteredArrayAdapter;
 import com.tokenautocomplete.TokenCompleteTextView;
 
 import java.util.List;
 
 public class TokenActivity extends Activity implements TokenCompleteTextView.TokenListener {
-    ContactsCompletionView completionView;
-    Person[] people;
-    ArrayAdapter<Person> adapter;
+
+    private static final class ContactsAdapter extends SimpleCursorAdapter {
+
+        private static final String[] PROJECTION = new String[] {
+                ContactsContract.CommonDataKinds.Phone._ID,
+                ContactsContract.CommonDataKinds.Phone.LOOKUP_KEY,
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB ?
+                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY :
+                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                ContactsContract.CommonDataKinds.Phone.NUMBER,
+                ContactsContract.CommonDataKinds.Phone.TYPE,
+                ContactsContract.CommonDataKinds.Phone.CONTACT_ID
+        };
+        private static final String[] FROM = new String[] {
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB ?
+                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY :
+                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                ContactsContract.CommonDataKinds.Phone.NUMBER
+        };
+        private static final int[] TO = new int[] {android.R.id.text1, android.R.id.text2};
+        private static final String ORDERING =
+                ContactsContract.CommonDataKinds.Phone.TIMES_CONTACTED + " DESC, " +
+                        (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB ?
+                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME_PRIMARY :
+                                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME) +
+                        " COLLATE LOCALIZED ASC";
+
+        public ContactsAdapter(final Context context) {
+            super(context, R.layout.person_layout, null, FROM, TO, 0);
+
+            setFilterQueryProvider(new FilterQueryProvider() {
+                @Override
+                public Cursor runQuery(CharSequence charSequence) {
+                    //noinspection ConstantConditions
+                    Uri uri = charSequence == null || charSequence.length() == 0 ?
+                            ContactsContract.CommonDataKinds.Phone.CONTENT_URI :
+                            Uri.withAppendedPath(
+                                    ContactsContract.CommonDataKinds.Phone.CONTENT_FILTER_URI,
+                                    charSequence.toString());
+                    assert uri != null;
+                    return context.getContentResolver().query(uri, PROJECTION, null, null,
+                            ORDERING);
+                }
+            });
+        }
+
+        @Override
+        public View getView(final int position, final View convertView, final ViewGroup parent) {
+            final View view = super.getView(position, convertView, parent);
+
+            Person person = Person.get((Cursor)getItem(position));
+
+            ((TextView)view.findViewById(R.id.name)).setText(person.getName());
+            ((TextView)view.findViewById(R.id.email)).setText(person.getNumber());
+
+            return view;
+        }
+    }
+
+    private ContactsCompletionView completionView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        people = new Person[]{
-                new Person("Marshall Weir", "marshall@example.com"),
-                new Person("Margaret Smith", "margaret@example.com"),
-                new Person("Max Jordan", "max@example.com"),
-                new Person("Meg Peterson", "meg@example.com"),
-                new Person("Amanda Johnson", "amanda@example.com"),
-                new Person("Terry Anderson", "terry@example.com")
-        };
-
-        adapter = new FilteredArrayAdapter<Person>(this, R.layout.person_layout, people) {
-            @Override
-            public View getView(int position, View convertView, ViewGroup parent) {
-                if (convertView == null) {
-
-                    LayoutInflater l = (LayoutInflater)getContext().getSystemService(Activity.LAYOUT_INFLATER_SERVICE);
-                    convertView = (View)l.inflate(R.layout.person_layout, parent, false);
-                }
-
-                Person p = getItem(position);
-                ((TextView)convertView.findViewById(R.id.name)).setText(p.getName());
-                ((TextView)convertView.findViewById(R.id.email)).setText(p.getEmail());
-
-                return convertView;
-            }
-
-            @Override
-            protected boolean keepObject(Person obj, String mask) {
-                mask = mask.toLowerCase();
-                return obj.getName().toLowerCase().startsWith(mask) || obj.getEmail().toLowerCase().startsWith(mask);
-            }
-        };
+        final ContactsAdapter adapter = new ContactsAdapter(this);
 
         completionView = (ContactsCompletionView)findViewById(R.id.searchView);
         completionView.setAdapter(adapter);
         completionView.setTokenListener(this);
-
-        if (savedInstanceState == null) {
-            completionView.setPrefix("To: ");
-            completionView.addObject(people[0]);
-            completionView.addObject(people[1]);
-        }
 
         Button removeButton = (Button)findViewById(R.id.removeButton);
         removeButton.setOnClickListener(new View.OnClickListener() {

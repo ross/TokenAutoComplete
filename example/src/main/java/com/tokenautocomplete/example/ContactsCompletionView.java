@@ -2,6 +2,7 @@ package com.tokenautocomplete.example;
 
 import android.app.Activity;
 import android.content.Context;
+import android.database.Cursor;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -21,35 +22,52 @@ public class ContactsCompletionView extends TokenCompleteTextView {
 
     public ContactsCompletionView(Context context) {
         super(context);
+        init();
     }
 
     public ContactsCompletionView(Context context, AttributeSet attrs) {
         super(context, attrs);
+        init();
     }
 
     public ContactsCompletionView(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
+        init();
+    }
+
+    private void init() {
+        allowDuplicates(false);
+        setTokenClickStyle(TokenClickStyle.Select);
     }
 
     @Override
-    protected View getViewForObject(Object object) {
+    protected View getViewForObject(final Object object) {
         Person p = (Person)object;
 
         LayoutInflater l = (LayoutInflater)getContext().getSystemService(Activity.LAYOUT_INFLATER_SERVICE);
-        LinearLayout view = (LinearLayout)l.inflate(R.layout.contact_token, (ViewGroup)ContactsCompletionView.this.getParent(), false);
-        ((TextView)view.findViewById(R.id.name)).setText(p.getEmail());
+        LinearLayout view = (LinearLayout)l.inflate(R.layout.contact_token,
+                (ViewGroup)ContactsCompletionView.this.getParent(), false);
+        ((TextView)view.findViewById(R.id.name)).setText(p.getNumber());
 
         return view;
     }
 
     @Override
-    protected Object defaultObject(String completionText) {
-        //Stupid simple example of guessing if we have an email or not
-        int index = completionText.indexOf('@');
-        if (index == -1) {
-            return new Person(completionText, completionText.replace(" ", "") + "@example.com");
+    protected Object defaultObject(final String completionText) {
+        return Person.get(completionText);
+    }
+
+    @Override
+    protected TokenImageSpan buildSpanForObject(final Object obj) {
+        final Person person;
+        if (obj instanceof Person) {
+            // it's a defaultObject
+            person = (Person)obj;
         } else {
-            return new Person(completionText.substring(0, index), completionText);
+            // it's a Cursor
+            final Cursor cursor = (Cursor)obj;
+            person = Person.get(cursor);
         }
+        return super.buildSpanForObject(person);
     }
 }
